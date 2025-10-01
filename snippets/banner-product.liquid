@@ -1,0 +1,95 @@
+{%- comment -%}
+Universal Product Banner
+Parameters:
+- product (optional)
+- handle (optional)
+{%- endcomment -%}
+
+{%- assign p = product -%}
+{%- if p == nil and handle != nil -%}
+  {%- assign p = all_products[handle] -%}
+{%- endif -%}
+
+{%- if p == nil -%}
+  <div class="banner-product-empty">
+    {{ 'Product not found' | t | default: 'Продукт не знайдено' }}
+  </div>
+  {%- break -%}
+{%- endif -%}
+
+<div class="banner-product">
+  <div class="banner-product__image">
+    {%- if p.featured_image != blank -%}
+      <img src="{{ p.featured_image | image_url: width: 600 }}" alt="{{ p.featured_image.alt | default: p.title | escape }}">
+    {%- else -%}
+      <div class="banner-product__placeholder">No image</div>
+    {%- endif -%}
+  </div>
+
+  <div class="banner-product__info">
+    <h2 class="banner-product__title">{{ p.title | escape }}</h2>
+
+    {%- capture price_html -%}
+      {%- if p.compare_at_price > p.price -%}
+        <span class="banner-product__price banner-product__price--sale">{{ p.price | money }}</span>
+        <span class="banner-product__price--compare">{{ p.compare_at_price | money }}</span>
+      {%- else -%}
+        <span class="banner-product__price">{{ p.price | money }}</span>
+      {%- endif -%}
+    {%- endcapture -%}
+    <div class="banner-product__prices">{{ price_html }}</div>
+
+    {%- assign color_option_index = -1 -%}
+    {%- for option in p.options_with_values -%}
+      {%- if option.name | downcase contains 'color' -%}
+        {%- assign color_option_index = forloop.index0 -%}
+      {%- endif -%}
+    {%- endfor -%}
+
+    {%- if color_option_index != -1 -%}
+      <div class="banner-product__colors">
+        {%- assign colors = p.variants | map: 'option' | uniq -%}
+        {%- assign colors = p.variants | map: "options" | map: color_option_index | uniq -%}
+        {%- assign count = 0 -%}
+        {%- for variant in p.variants -%}
+          {%- assign color_value = variant.options[color_option_index] -%}
+          {%- if color_value != blank -%}
+            <button
+              class="banner-product__color"
+              data-variant-id="{{ variant.id }}"
+              data-qty="{{ variant.inventory_quantity }}"
+              data-available="{{ variant.available }}"
+              style="background-color: {{ color_value | downcase }};"
+            >
+              {{ color_value }}
+            </button>
+            {%- assign count = count | plus: 1 -%}
+            {%- if count >= 3 -%}{% break %}{% endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+      <div class="banner-product__stock" id="banner-stock">—</div>
+    {%- else -%}
+      <div class="banner-product__no-color">
+        {{ 'No color options' | t | default: 'Колір не вказаний' }}
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.banner-product__color').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const qty = btn.dataset.qty;
+      const available = btn.dataset.available === 'true';
+      const stockEl = btn.closest('.banner-product').querySelector('#banner-stock');
+      if (!available || qty == '0') {
+        stockEl.innerText = '{{ "product.banner.not_available" | t | default: "Не доступно" }}';
+      } else {
+        stockEl.innerText = '{{ "product.banner.available_with_count" | t | default: "Доступно" }}: ' + qty;
+      }
+    });
+  });
+});
+</script>
