@@ -1,12 +1,10 @@
 {%- comment -%}
-Універсальний банер продукту у стилі з прикладу.
-Передача:
+
   {% render 'banner-product', handle: 'nike-air-max-plus' %}
 або:
   {% render 'banner-product', product: product %}
 
-Показує: галерею (велике фото + вертикальні мініатюри), назву, ціну (з урахуванням знижки),
-перші 3 кольори як чіпи. Клік по кольору — сумує залишок по всіх розмірах цього кольору.
+
 {%- endcomment -%}
 
 {%- assign p = product -%}
@@ -19,7 +17,7 @@
 {%- endif -%}
 {%- if p -%}
 
-{%- comment -%} Знаходимо індекс опції "Color/Colour"; якщо їі нема — беремо першу. {%- endcomment -%}
+{%- comment -%}{%- endcomment -%}
 {%- assign color_index = -1 -%}
 {%- for opt in p.options_with_values -%}
   {%- assign dn = opt.name | downcase -%}
@@ -202,7 +200,7 @@
     else{ stock.textContent = (Number.isFinite(qty) && qty>0) ? fmt(qty) : fmt('1+'); }
   }
   if(chips.length){
-    // якщо раптом усі 0 у перших трьох — лишимо останній як 0 для демо-гілки
+  
     var hasAny = chips.some(function(c){ return (parseInt(c.getAttribute('data-qty')||'0',10) > 0); });
     if(!hasAny){ var last=chips[chips.length-1]; if(last){ last.setAttribute('data-qty','0'); last.setAttribute('data-available','false'); } }
     show(chips[0]);
