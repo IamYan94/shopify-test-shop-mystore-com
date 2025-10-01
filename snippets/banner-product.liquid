@@ -1,95 +1,166 @@
 {%- comment -%}
-Universal Product Banner
-Parameters:
-- product (optional)
-- handle (optional)
+Universal Product Banner (snippet)
+Usage:
+  {% render 'banner-product', handle: 'product-handle' %}
+  або
+  {% render 'banner-product', product: product %}
 {%- endcomment -%}
 
 {%- assign p = product -%}
-{%- if p == nil and handle != nil -%}
+{%- if p == nil and handle != blank -%}
   {%- assign p = all_products[handle] -%}
 {%- endif -%}
 
 {%- if p == nil -%}
-  <div class="banner-product-empty">
-    {{ 'Product not found' | t | default: 'Продукт не знайдено' }}
+  <div class="bp bp--empty">
+    {{ 'product.banner.not_found' | t | default: 'Продукт не знайдено' }}
   </div>
-  {%- break -%}
+  {%- return -%}
 {%- endif -%}
 
-<div class="banner-product">
-  <div class="banner-product__image">
-    {%- if p.featured_image != blank -%}
-      <img src="{{ p.featured_image | image_url: width: 600 }}" alt="{{ p.featured_image.alt | default: p.title | escape }}">
-    {%- else -%}
-      <div class="banner-product__placeholder">No image</div>
-    {%- endif -%}
+{%- comment %} 1) Знайти опцію «Color»/«Colour»/«Колір» {% endcomment -%}
+{%- assign color_option_index = nil -%}
+{%- for option in p.options_with_values -%}
+  {%- assign opt_down = option.name | downcase -%}
+  {%- if opt_down == 'color' or opt_down == 'colour' or opt_down == 'колір' -%}
+    {%- assign color_option_index = forloop.index0 -%}
+  {%- endif -%}
+{%- endfor -%}
+
+{%- comment %} 2) Головне зображення + міні-галерея (зліва) {% endcomment -%}
+{%- assign all_images = p.media | where: 'media_type', 'image' -%}
+{%- if all_images == blank -%}{%- assign all_images = p.images -%}{%- endif -%}
+{%- assign main_img = p.featured_image | default: all_images.first -%}
+
+<div class="bp">
+  <div class="bp__media">
+    <div class="bp__thumbs">
+      {%- for m in all_images limit: 6 -%}
+        {%- assign thumb = m | image_url: width: 120 -%}
+        {%- assign large = m | image_url: width: 1100 -%}
+        <button class="bp-thumb" type="button" data-large="{{ large }}">
+          <img src="{{ thumb }}" alt="{{ m.alt | default: p.title | escape }}">
+        </button>
+      {%- endfor -%}
+    </div>
+
+    <div class="bp__image">
+      {%- if main_img -%}
+        <img id="bp-main" src="{{ main_img | image_url: width: 1100 }}"
+             alt="{{ main_img.alt | default: p.title | escape }}">
+      {%- else -%}
+        <div class="bp__placeholder">
+          {{ 'product.banner.no_image' | t | default: 'Зображення відсутнє' }}
+        </div>
+      {%- endif -%}
+      <div class="bp__badge">
+        <span>★</span> {{ 'product.banner.badge' | t | default: 'Highly Rated' }}
+      </div>
+    </div>
   </div>
 
-  <div class="banner-product__info">
-    <h2 class="banner-product__title">{{ p.title | escape }}</h2>
+  <div class="bp__info">
+    <h2 class="bp__title">{{ p.title | escape }}</h2>
 
-    {%- capture price_html -%}
-      {%- if p.compare_at_price > p.price -%}
-        <span class="banner-product__price banner-product__price--sale">{{ p.price | money }}</span>
-        <span class="banner-product__price--compare">{{ p.compare_at_price | money }}</span>
+    {%- comment %} Ціна + знижка через capture {% endcomment -%}
+    {%- capture price_block -%}
+      {%- if p.compare_at_price_max > p.price -%}
+        <span class="bp__price bp__price--sale">{{ p.price | money }}</span>
+        <span class="bp__price--old">{{ p.compare_at_price_max | money }}</span>
       {%- else -%}
-        <span class="banner-product__price">{{ p.price | money }}</span>
+        <span class="bp__price">{{ p.price | money }}</span>
       {%- endif -%}
     {%- endcapture -%}
-    <div class="banner-product__prices">{{ price_html }}</div>
+    <div class="bp__priceWrap">{{- price_block -}}</div>
 
-    {%- assign color_option_index = -1 -%}
-    {%- for option in p.options_with_values -%}
-      {%- if option.name | downcase contains 'color' -%}
-        {%- assign color_option_index = forloop.index0 -%}
-      {%- endif -%}
-    {%- endfor -%}
-
-    {%- if color_option_index != -1 -%}
-      <div class="banner-product__colors">
-        {%- assign colors = p.variants | map: 'option' | uniq -%}
-        {%- assign colors = p.variants | map: "options" | map: color_option_index | uniq -%}
+    {%- comment %} 3) Кнопки кольорів (беремо перші 3 унікальні) {% endcomment -%}
+    {%- if color_option_index == nil -%}
+      <div class="bp__notice">
+        {{ 'product.banner.no_color_option' | t | default: 'Опція «Колір» відсутня' }}
+      </div>
+    {%- else -%}
+      {%- assign shown_colors = '' -%}
+      <div class="bp__colors">
         {%- assign count = 0 -%}
-        {%- for variant in p.variants -%}
-          {%- assign color_value = variant.options[color_option_index] -%}
-          {%- if color_value != blank -%}
-            <button
-              class="banner-product__color"
-              data-variant-id="{{ variant.id }}"
-              data-qty="{{ variant.inventory_quantity }}"
-              data-available="{{ variant.available }}"
-              style="background-color: {{ color_value | downcase }};"
-            >
-              {{ color_value }}
-            </button>
+        {%- for v in p.variants -%}
+          {%- assign col = v.options[color_option_index] | default: '' -%}
+          {%- if col != '' and shown_colors contains col == false -%}
             {%- assign count = count | plus: 1 -%}
-            {%- if count >= 3 -%}{% break %}{% endif -%}
+            <button class="bp-color"
+                    type="button"
+                    data-variant-id="{{ v.id }}"
+                    data-qty="{{ v.inventory_quantity | default: 0 }}"
+                    data-available="{{ v.available }}"
+                    {%- if v.featured_image -%}
+                      data-img="{{ v.featured_image | image_url: width: 1100 }}"
+                    {%- endif -%}>
+              {{ col | escape }}
+            </button>
+            {%- assign shown_colors = shown_colors | append: col | append: ',' -%}
+            {%- if count >= 3 -%}{% break %}{%- endif -%}
           {%- endif -%}
         {%- endfor -%}
       </div>
-      <div class="banner-product__stock" id="banner-stock">—</div>
-    {%- else -%}
-      <div class="banner-product__no-color">
-        {{ 'No color options' | t | default: 'Колір не вказаний' }}
+      <div class="bp__stock js-bp-stock">
+        {{ 'product.banner.select_color' | t | default: 'Виберіть колір' }}
       </div>
     {%- endif -%}
   </div>
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.banner-product__color').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const qty = btn.dataset.qty;
-      const available = btn.dataset.available === 'true';
-      const stockEl = btn.closest('.banner-product').querySelector('#banner-stock');
-      if (!available || qty == '0') {
-        stockEl.innerText = '{{ "product.banner.not_available" | t | default: "Не доступно" }}';
-      } else {
-        stockEl.innerText = '{{ "product.banner.available_with_count" | t | default: "Доступно" }}: ' + qty;
-      }
-    });
-  });
+document.addEventListener('click', function(e){
+  /* клік по мініатюрі зліва */
+  const t = e.target.closest('.bp-thumb');
+  if (t) {
+    const img = t.dataset.large;
+    const main = t.closest('.bp').querySelector('#bp-main');
+    if (img && main) main.src = img;
+  }
+
+  /* клік по кнопці кольору */
+  const c = e.target.closest('.bp-color');
+  if (c) {
+    const qty = parseInt(c.dataset.qty || '0', 10);
+    const available = c.dataset.available === 'true';
+    const img = c.dataset.img;
+    const root = c.closest('.bp');
+    const stock = root.querySelector('.js-bp-stock');
+    const main = root.querySelector('#bp-main');
+
+    if (img && main) main.src = img;
+
+    if (!available || qty <= 0) {
+      stock.textContent = "{{ 'product.banner.not_available' | t | default: 'не доступно' }}";
+    } else {
+      stock.textContent =
+        "{{ 'product.banner.available_with_count' | t | default: 'Доступно: %{count}' }}"
+          .replace('%{count}', qty);
+    }
+  }
 });
 </script>
+
+<style>
+/* базова стилізація під макет */
+.bp{display:grid;grid-template-columns:1fr 1fr;gap:32px;border:1px solid #eee;border-radius:12px;padding:24px;background:#fff}
+.bp__media{display:grid;grid-template-columns:100px 1fr;gap:16px}
+.bp__thumbs{display:flex;flex-direction:column;gap:12px}
+.bp-thumb{border:0;background:#fff;padding:0;cursor:pointer}
+.bp-thumb img{width:76px;height:76px;object-fit:cover;border:1px solid #eee;border-radius:10px}
+.bp__image{position:relative}
+#bp-main{width:100%;height:auto;border-radius:12px;background:#f7f7f7}
+.bp__badge{position:absolute;top:12px;left:12px;background:#fff;border-radius:8px;padding:6px 10px;border:1px solid #eee;font-size:14px;display:flex;gap:6px;align-items:center}
+.bp__info{display:flex;flex-direction:column;gap:12px}
+.bp__title{font-size:28px;margin:0 0 6px 0}
+.bp__priceWrap{display:flex;gap:10px;align-items:baseline}
+.bp__price{font-size:20px;font-weight:600}
+.bp__price--sale{color:#d84141;font-weight:700}
+.bp__price--old{text-decoration:line-through;color:#8a8a8a}
+.bp__colors{display:flex;gap:10px;margin-top:8px}
+.bp-color{padding:8px 12px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer}
+.bp-color:hover{border-color:#111}
+.bp__stock{margin-top:6px;color:#444}
+.bp__placeholder{padding:40px;background:#fafafa;border:1px dashed #ddd;border-radius:12px;text-align:center}
+@media (max-width: 900px){.bp{grid-template-columns:1fr}}
+</style>
