@@ -1,11 +1,12 @@
 {%- comment -%}
-Універсальний банер продукту (без локалізацій).
+Універсальний банер продукту у стилі з прикладу.
 Передача:
   {% render 'banner-product', handle: 'nike-air-max-plus' %}
 або:
   {% render 'banner-product', product: product %}
 
-Показує: фото, назву, ціну (зі знижкою), перші 3 кольори, індикатор наявності.
+Показує: галерею (велике фото + вертикальні мініатюри), назву, ціну (з урахуванням знижки),
+перші 3 кольори як чіпи. Клік по кольору — сумує залишок по всіх розмірах цього кольору.
 {%- endcomment -%}
 
 {%- assign p = product -%}
@@ -18,7 +19,7 @@
 {%- endif -%}
 {%- if p -%}
 
-{%- comment -%} Визначаємо індекс опції Color/Colour. Якщо нема — беремо першу опцію. {%- endcomment -%}
+{%- comment -%} Знаходимо індекс опції "Color/Colour"; якщо їі нема — беремо першу. {%- endcomment -%}
 {%- assign color_index = -1 -%}
 {%- for opt in p.options_with_values -%}
   {%- assign dn = opt.name | downcase -%}
@@ -37,75 +38,87 @@
   {%- if p.price -%}
     {%- assign current_price = p.price -%}
     {%- assign compare_price = p.compare_at_price_max -%}
-    {%- if compare_price and compare_price > current_price -%}
-      <div class="bp-price">
-        <span class="bp-price-sale">{{ current_price | money_without_trailing_zeros }}</span>
-        <span class="bp-price-compare">{{ compare_price | money_without_trailing_zeros }}</span>
-      </div>
-    {%- else -%}
-      <div class="bp-price">
-        <span class="bp-price-regular">{{ current_price | money_without_trailing_zeros }}</span>
-      </div>
-    {%- endif -%}
+    <div class="bp-price">
+      {%- if compare_price and compare_price > current_price -%}
+        <div class="bp-price-now">{{ current_price | money_without_trailing_zeros }}</div>
+        <div class="bp-price-was">{{ compare_price | money_without_trailing_zeros }}</div>
+      {%- else -%}
+        <div class="bp-price-now">{{ current_price | money_without_trailing_zeros }}</div>
+      {%- endif -%}
+    </div>
   {%- endif -%}
 {%- endcapture -%}
 
-{%- assign img = p.featured_image -%}
-{%- assign alt_text = img.alt | default: p.title | escape -%}
+{%- assign main_img = p.featured_media | default: p.featured_image -%}
+{%- assign images = p.images -%}
+{%- assign alt_text = main_img.alt | default: p.title | escape -%}
 
-<div class="bp-wrap" data-banner="product" data-pid="{{ p.id }}">
-  <div class="bp-left">
-    {%- if img -%}
-      {{ img | image_url: width: 980 | image_tag: alt: alt_text, class: 'bp-img' }}
-    {%- else -%}
-      <div class="bp-placeholder" aria-label="{{ alt_text }}">No image</div>
-    {%- endif -%}
-  </div>
-
-  <div class="bp-right">
-    <div class="bp-vendor">
-      <span class="bp-badge">{{ p.vendor | escape }}</span>
+<div class="bp-card" data-banner="product" data-pid="{{ p.id }}">
+  <div class="bp-media">
+    <div class="bp-thumbs">
+      {%- assign thumb_count = 0 -%}
+      {%- for im in images -%}
+        {%- if thumb_count >= 5 -%}{%- break -%}{%- endif -%}
+        <button type="button"
+          class="bp-thumb{% if forloop.first %} is-active{% endif %}"
+          data-full="{{ im | image_url: width: 1600 }}"
+          aria-label="thumb {{ forloop.index }}">
+          {{- im | image_url: width: 120, height: 120, crop: 'center' | image_tag: alt: (im.alt | default: p.title), class: 'bp-thumb-img' -}}
+        </button>
+        {%- assign thumb_count = thumb_count | plus: 1 -%}
+      {%- endfor -%}
     </div>
 
-    <h3 class="bp-title">{{ p.title | escape }}</h3>
+    <div class="bp-main">
+      <div class="bp-pill">Highly rated</div>
+      {%- if main_img -%}
+        {{ main_img | image_url: width: 1600 | image_tag: alt: alt_text, class: 'bp-main-img', loading: 'lazy' }}
+      {%- else -%}
+        <div class="bp-main-placeholder" aria-label="{{ alt_text }}">No image</div>
+      {%- endif -%}
+    </div>
+  </div>
+
+  <div class="bp-info">
+    <h1 class="bp-title">{{ p.title | escape }}</h1>
     {{- price_block -}}
 
-    <div class="bp-colors">
-      <div class="bp-colors-label">Select color</div>
-
+    <div class="bp-row">
+      <div class="bp-label">Select color</div>
       {%- if colors and colors != blank -%}
-        <div class="bp-color-list">
+        <div class="bp-chips">
           {%- assign rendered = 0 -%}
           {%- for c in colors -%}
             {%- if c == blank -%}{%- continue -%}{%- endif -%}
             {%- if rendered >= 3 -%}{%- break -%}{%- endif -%}
 
-            {%- assign v_match = nil -%}
+            {%- assign qty_sum = 0 -%}
+            {%- assign any_available = false -%}
             {%- for v in p.variants -%}
-              {%- if color_index == 0 and v.option1 == c -%}{%- assign v_match = v -%}{%- break -%}{%- endif -%}
-              {%- if color_index == 1 and v.option2 == c -%}{%- assign v_match = v -%}{%- break -%}{%- endif -%}
-              {%- if color_index == 2 and v.option3 == c -%}{%- assign v_match = v -%}{%- break -%}{%- endif -%}
+              {%- assign hit = false -%}
+              {%- if color_index == 0 and v.option1 == c -%}{%- assign hit = true -%}{%- endif -%}
+              {%- if color_index == 1 and v.option2 == c -%}{%- assign hit = true -%}{%- endif -%}
+              {%- if color_index == 2 and v.option3 == c -%}{%- assign hit = true -%}{%- endif -%}
+              {%- if hit -%}
+                {%- if v.inventory_management -%}
+                  {%- assign qty_sum = qty_sum | plus: (v.inventory_quantity | default: 0) -%}
+                  {%- if v.inventory_quantity > 0 -%}{%- assign any_available = true -%}{%- endif -%}
+                {%- else -%}
+                  {%- if v.available -%}{%- assign any_available = true -%}{%- assign qty_sum = qty_sum | plus: 1 -%}{%- endif -%}
+                {%- endif -%}
+              {%- endif -%}
             {%- endfor -%}
 
-            {%- if v_match -%}
-              {%- assign qty = 0 -%}
-              {%- if v_match.inventory_management -%}
-                {%- assign qty = v_match.inventory_quantity | default: 0 -%}
-              {%- else -%}
-                {%- if v_match.available -%}{%- assign qty = 1 -%}{%- else -%}{%- assign qty = 0 -%}{%- endif -%}
-              {%- endif -%}
-              <button type="button"
-                      class="bp-color"
-                      data-variant-id="{{ v_match.id }}"
-                      data-color="{{ c | escape }}"
-                      data-qty="{{ qty }}"
-                      data-available="{{ v_match.available }}"
-                      aria-label="{{ c | escape }}">
-                <span class="bp-swatch">{{ c | escape }}</span>
-              </button>
-              {%- assign rendered = rendered | plus: 1 -%}
-            {%- endif -%}
+            <button type="button"
+              class="bp-chip{% unless any_available %} is-oos{% endunless %}{% if forloop.first %} is-active{% endif %}"
+              data-color="{{ c | escape }}"
+              data-qty="{{ qty_sum }}"
+              data-available="{{ any_available }}"
+              aria-label="{{ c | escape }}">
+              {{- c | escape -}}
+            </button>
 
+            {%- assign rendered = rendered | plus: 1 -%}
           {%- endfor -%}
         </div>
       {%- else -%}
@@ -114,74 +127,88 @@
     </div>
 
     <div class="bp-stock" data-stock
-         data-not-available="Not available"
-         data-available-with-count="Available: %{count}">
+      data-not-available="Not available"
+      data-available-with-count="Available: %{count}">
     </div>
 
-    <div class="bp-cta">
-      <a class="bp-link" href="{{ p.url }}">View product</a>
-    </div>
+    <a class="bp-cta" href="{{ p.url }}">View product</a>
   </div>
 </div>
 
 <style>
-.bp-wrap{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;border:1px solid #e5e7eb;border-radius:16px;padding:20px}
-.bp-img{width:100%;height:auto;border-radius:12px;display:block;object-fit:cover}
-.bp-placeholder{display:flex;align-items:center;justify-content:center;background:#f3f4f6;border-radius:12px;min-height:320px;font-weight:600}
-.bp-title{font-size:24px;line-height:1.2;margin:8px 0 6px}
-.bp-price{display:flex;gap:10px;align-items:center;margin-bottom:12px}
-.bp-price-regular,.bp-price-sale{font-weight:700}
-.bp-price-sale{font-size:20px}
-.bp-price-compare{text-decoration:line-through;opacity:.6}
-.bp-badge{display:inline-block;font-size:12px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:999px;margin-bottom:6px}
-.bp-colors-label{font-size:14px;opacity:.8;margin-bottom:8px}
-.bp-color-list{display:flex;gap:10px;flex-wrap:wrap}
-.bp-color{border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px;background:#fff;cursor:pointer;transition:box-shadow .15s ease}
-.bp-color:hover{box-shadow:0 2px 10px rgba(0,0,0,.06)}
-.bp-color[aria-selected="true"]{outline:2px solid #111}
-.bp-swatch{display:inline-block;min-width:48px;text-align:center}
-.bp-stock{margin-top:10px;font-size:14px;min-height:20px}
+/* Layout */
+.bp-card{display:grid;grid-template-columns:1.2fr 1fr;gap:32px;border:1px solid #e5e7eb;border-radius:18px;padding:22px;background:#fff}
+@media(max-width:1024px){.bp-card{grid-template-columns:1fr}}
+/* Gallery */
+.bp-media{display:grid;grid-template-columns:112px 1fr;gap:18px;align-items:start}
+@media(max-width:680px){.bp-media{grid-template-columns:1fr}}
+.bp-thumbs{display:flex;flex-direction:column;gap:12px}
+.bp-thumb{border:1px solid #ececec;border-radius:12px;padding:6px;background:#fff;cursor:pointer;transition:box-shadow .15s}
+.bp-thumb:hover{box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.bp-thumb.is-active{outline:2px solid #1f2937}
+.bp-thumb-img{display:block;border-radius:8px}
+.bp-main{position:relative;background:#f6f7f8;border-radius:16px;overflow:hidden;padding:10px}
+.bp-main-img{width:100%;height:auto;display:block;object-fit:contain;border-radius:10px}
+.bp-main-placeholder{display:flex;align-items:center;justify-content:center;min-height:300px;color:#666}
+.bp-pill{position:absolute;top:16px;left:16px;background:#0f172a;color:#fff;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600}
+/* Info */
+.bp-info{padding-top:6px}
+.bp-title{font-size:40px;line-height:1.1;margin:0 0 8px}
+.bp-price{display:flex;gap:12px;align-items:baseline;margin:6px 0 16px}
+.bp-price-now{font-size:22px;font-weight:800}
+.bp-price-was{font-size:16px;text-decoration:line-through;opacity:.6}
+.bp-row{margin:16px 0 10px}
+.bp-label{font-size:14px;opacity:.8;margin-bottom:8px}
+.bp-chips{display:flex;flex-wrap:wrap;gap:12px}
+.bp-chip{background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:10px 16px;cursor:pointer;transition:border-color .15s, box-shadow .15s}
+.bp-chip.is-active{border-color:#111;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.bp-chip.is-oos{opacity:.55;cursor:not-allowed}
+.bp-stock{min-height:22px;margin:8px 0 18px;font-size:14px;color:#111}
 .bp-msg{font-size:14px;color:#b91c1c}
-.bp-link{display:inline-block;margin-top:14px;padding:10px 14px;border-radius:10px;background:#111;color:#fff;text-decoration:none}
-@media(max-width:940px){.bp-wrap{grid-template-columns:1fr}}
+.bp-cta{display:block;width:100%;text-align:center;background:#111;color:#fff;text-decoration:none;border-radius:12px;padding:16px 18px;font-weight:700}
+/* Small */
+@media(max-width:480px){.bp-title{font-size:28px}.bp-price-now{font-size:20px}}
 </style>
 
 <script>
 (function(){
-  var here=document.currentScript;
-  var wrap=null, ptr=here;
-  while(ptr){ if(ptr.previousElementSibling && ptr.previousElementSibling.matches('.bp-wrap')){ wrap=ptr.previousElementSibling; break } ptr=ptr.previousElementSibling }
-  if(!wrap) wrap=document.querySelector('.bp-wrap[data-banner="product"]');
-  if(!wrap) return;
+  var script=document.currentScript;
+  var root=script; while(root && !(root.previousElementSibling && root.previousElementSibling.matches('.bp-card'))){ root=root.previousElementSibling }
+  root = root ? root.previousElementSibling : document.querySelector('.bp-card[data-banner="product"]');
+  if(!root) return;
 
-  var list=[].slice.call(wrap.querySelectorAll('.bp-color'));
-  var stock=wrap.querySelector('[data-stock]');
+  // Gallery: thumbs -> main
+  var mainImg=root.querySelector('.bp-main-img');
+  var thumbs=[].slice.call(root.querySelectorAll('.bp-thumb'));
+  thumbs.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      thumbs.forEach(function(b){ b.classList.remove('is-active'); });
+      btn.classList.add('is-active');
+      var full=btn.getAttribute('data-full');
+      if(mainImg && full){ mainImg.setAttribute('src', full); }
+    });
+  });
 
-  function fmt(q){
-    return stock.getAttribute('data-available-with-count').replace('%{count}', q);
-  }
-
+  // Colors: availability
+  var chips=[].slice.call(root.querySelectorAll('.bp-chip'));
+  var stock=root.querySelector('[data-stock]');
+  function fmt(q){ return stock.getAttribute('data-available-with-count').replace('%{count}', q); }
   function show(btn){
-    list.forEach(function(b){ b.setAttribute('aria-selected','false'); });
-    btn.setAttribute('aria-selected','true');
-    var qty=parseInt(btn.dataset.qty,10);
-    var avail=(btn.dataset.available==='true') || qty>0;
-    if(!avail || qty<=0){
-      stock.textContent=stock.getAttribute('data-not-available');
-    }else{
-      stock.textContent=(Number.isFinite(qty) && qty>0) ? fmt(qty) : fmt('1+');
-    }
+    chips.forEach(function(c){ c.classList.remove('is-active'); });
+    btn.classList.add('is-active');
+    var qty=parseInt(btn.getAttribute('data-qty')||'0',10);
+    var avail=(btn.getAttribute('data-available')==='true') || qty>0;
+    if(!avail || qty<=0){ stock.textContent = stock.getAttribute('data-not-available'); }
+    else{ stock.textContent = (Number.isFinite(qty) && qty>0) ? fmt(qty) : fmt('1+'); }
   }
-
-  if(list.length){
-    var noneHaveQty=true;
-    list.forEach(function(b){ if((parseInt(b.dataset.qty,10)||0)>0) noneHaveQty=false; });
-    if(noneHaveQty){ var last=list[list.length-1]; if(last){ last.dataset.qty='0'; last.dataset.available='false'; } }
-    show(list[0]);
-    list.forEach(function(b){ b.addEventListener('click', function(){ show(b); }); });
+  if(chips.length){
+    // якщо раптом усі 0 у перших трьох — лишимо останній як 0 для демо-гілки
+    var hasAny = chips.some(function(c){ return (parseInt(c.getAttribute('data-qty')||'0',10) > 0); });
+    if(!hasAny){ var last=chips[chips.length-1]; if(last){ last.setAttribute('data-qty','0'); last.setAttribute('data-available','false'); } }
+    show(chips[0]);
+    chips.forEach(function(c){ c.addEventListener('click', function(){ show(c); }); });
   }
 })();
 </script>
 {%- endif -%}
-
 
